@@ -1,0 +1,18 @@
+{
+  "name": "xroot-it-bot",
+  "version": "3.0.0",
+  "description": "Xroot IT Telegram Bot",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "lowdb": "^1.0.0",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+}
