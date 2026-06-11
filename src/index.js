@@ -425,6 +425,18 @@ bot.catch((err) => {
 });
 
 // ====================================
+// HEALTH SERVER (Render bepul Web Service uchun)
+// Polling bot HTTP ochmaydi; Render esa PORT'ni kutadi va trafik bo'lmasa
+// servisni "uxlatadi". Kichik server + tashqi uptime-ping bilan tirik turadi.
+// ====================================
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Xroot IT Bot is running ✅');
+}).listen(PORT, () => console.log(`🌐 Health server :${PORT}`));
+
+// ====================================
 // ISHGA TUSHIRISH
 // ====================================
 bot.launch()

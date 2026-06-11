@@ -1,0 +1,25 @@
+# Render.com Blueprint — Xroot IT Telegram bot
+# https://render.com/docs/blueprint-spec
+#
+# Bot long-polling rejimida ishlaydi + kichik health HTTP server bor,
+# shuning uchun bepul "web" turidagi servis sifatida deploy qilinadi.
+#
+# Eslatma: bepul Web Service 15 daqiqa trafiksiz "uxlaydi". Tirik turishi
+# uchun servis URL'iga har ~10 daqiqada ping yuboring (UptimeRobot yoki
+# cron-job.org — bepul).
+
+services:
+  - type: web
+    name: xroot-agency-bot
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        sync: false          # Render dashboard'da qo'lda kiritiladi (maxfiy)
+      - key: ADMIN_TELEGRAM_ID
+        sync: false          # Render dashboard'da qo'lda kiritiladi
