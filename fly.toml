@@ -1,0 +1,18 @@
+# fly.toml app configuration file for xroot-agency-bot
+#
+# Bu bot long-polling rejimida ishlaydi (bot.launch()), HTTP server ochmaydi.
+# Shu sababli [http_service] yo'q va mashina doimo ishlab turadi (worker).
+#
+# See https://fly.io/docs/reference/configuration/ for information.
+
+app = 'xroot-agency-bot'
+primary_region = 'fra'
+
+[build]
+
+# Polling bot — hech qanday [http_service]/[[services]] yo'q, shuning uchun
+# avtomatik to'xtatish (autostop) qo'llanmaydi va mashina doimo ishlab turadi.
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
