@@ -16,6 +16,11 @@ const ADMIN_ID = String(process.env.ADMIN_TELEGRAM_ID);
 const contactMode  = new Set();
 const broadcastMode = new Set();
 
+// Audit ariza sessiyalari: telegramId -> { step, data }
+const auditSessions = new Map();
+// Deep-link orqali "audit" niyati bilan kelganlar (til tanlagandan keyin boshlanadi)
+const pendingAudit  = new Set();
+
 // ====================================
 // MATNLAR (3 TIL)
 // ====================================
@@ -36,6 +41,12 @@ const T = {
     btnLanguage:   '🌐 Til',
     btnBack:       '⬅️ Orqaga',
     unknown:       '❓ Menyu tugmalaridan foydalaning yoki /start yozing',
+    auditBtn:      '📝 Bepul Audit',
+    auditStart:    'Ajoyib! 🎯 Bepul IT audit uchun 3 ta qisqa savol. Bu atigi ~1 daqiqa.\n\n*1/3* — Kompaniyangiz nomi va faoliyat sohasi qanday?',
+    auditPhone:    '*2/3* — Bog\'lanish uchun telefon raqamingiz?\n\n👇 Pastdagi tugma orqali yuboring yoki qo\'lda yozing.',
+    auditNeed:     '*3/3* — Qanday tizim yoki muammo bor? (masalan: CRM kerak, jarayonlar avtomatlashmagan, mobil ilova kerak...)',
+    auditDone:     '✅ Rahmat! Arizangiz qabul qilindi.\n\nMutaxassisimiz 24 soat ichida siz bilan bog\'lanadi. 🙏',
+    sharePhone:    '📱 Raqamni yuborish',
   },
   ru: {
     welcome:       '👋 Добро пожаловать в *Xroot IT Bot*!\n\nВыберите язык:',
@@ -53,6 +64,12 @@ const T = {
     btnLanguage:   '🌐 Язык',
     btnBack:       '⬅️ Назад',
     unknown:       '❓ Используйте кнопки меню или введите /start',
+    auditBtn:      '📝 Бесплатный аудит',
+    auditStart:    'Отлично! 🎯 3 коротких вопроса для бесплатного IT-аудита. Это всего ~1 минута.\n\n*1/3* — Название вашей компании и сфера деятельности?',
+    auditPhone:    '*2/3* — Ваш контактный номер телефона?\n\n👇 Отправьте кнопкой ниже или введите вручную.',
+    auditNeed:     '*3/3* — Какая система нужна или какая проблема? (например: нужен CRM, процессы не автоматизированы, нужно мобильное приложение...)',
+    auditDone:     '✅ Спасибо! Ваша заявка принята.\n\nНаш специалист свяжется с вами в течение 24 часов. 🙏',
+    sharePhone:    '📱 Отправить номер',
   },
   en: {
     welcome:       '👋 Welcome to *Xroot IT Bot*!\n\nChoose your language:',
@@ -70,6 +87,12 @@ const T = {
     btnLanguage:   '🌐 Language',
     btnBack:       '⬅️ Back',
     unknown:       '❓ Please use the menu buttons or type /start',
+    auditBtn:      '📝 Free Audit',
+    auditStart:    'Great! 🎯 3 quick questions for your free IT audit. Takes just ~1 minute.\n\n*1/3* — Your company name and industry?',
+    auditPhone:    '*2/3* — Your contact phone number?\n\n👇 Send it with the button below or type it manually.',
+    auditNeed:     '*3/3* — What system do you need or what problem are you facing? (e.g. need a CRM, processes not automated, need a mobile app...)',
+    auditDone:     '✅ Thank you! Your request has been received.\n\nOur specialist will contact you within 24 hours. 🙏',
+    sharePhone:    '📱 Share number',
   },
 };
 
@@ -88,6 +111,7 @@ function tx(telegramId) {
 function mainKeyboard(telegramId) {
   const t = tx(telegramId);
   return Markup.keyboard([
+    [t.auditBtn],
     [t.btnAbout,   t.btnServices],
     [t.btnFaq,     t.btnContact],
     [t.btnLanguage],
@@ -98,8 +122,58 @@ function backKeyboard(telegramId) {
   return Markup.keyboard([[tx(telegramId).btnBack]]).resize();
 }
 
+// Telefon so'rash uchun klaviatura (kontakt ulashish tugmasi bilan)
+function phoneKeyboard(telegramId) {
+  const t = tx(telegramId);
+  return Markup.keyboard([
+    [Markup.button.contactRequest(t.sharePhone)],
+    [t.btnBack],
+  ]).resize();
+}
+
 function isAdmin(ctx) {
   return String(ctx.from.id) === ADMIN_ID;
+}
+
+// ====================================
+// AUDIT ARIZA OQIMI
+// ====================================
+async function startAudit(ctx) {
+  const id = ctx.from.id;
+  contactMode.delete(id);
+  pendingAudit.delete(id);
+  auditSessions.set(id, { step: 'company', data: {} });
+  const t = tx(id);
+  await ctx.reply(t.auditStart, { parse_mode: 'Markdown', ...backKeyboard(id) });
+}
+
+async function finalizeAudit(ctx) {
+  const { id, username, first_name } = ctx.from;
+  const sess = auditSessions.get(id);
+  const t = tx(id);
+  auditSessions.delete(id);
+
+  db.saveLead({
+    telegramId: id,
+    firstName:  first_name,
+    username,
+    company:    sess.data.company,
+    phone:      sess.data.phone,
+    need:       sess.data.need,
+  });
+
+  await ctx.telegram.sendMessage(
+    ADMIN_ID,
+    `🔥 *YANGI AUDIT ARIZASI*\n\n` +
+    `👤 ${first_name || 'Nomsiz'}${username ? ` (@${username})` : ''}\n` +
+    `🏢 ${sess.data.company}\n` +
+    `📞 ${sess.data.phone}\n` +
+    `💬 ${sess.data.need}\n\n` +
+    `🆔 \`${id}\` · 🌐 ${getLang(id).toUpperCase()}`,
+    { parse_mode: 'Markdown' }
+  ).catch(() => {});
+
+  await ctx.reply(t.auditDone, { parse_mode: 'Markdown', ...mainKeyboard(id) });
 }
 
 // ====================================
@@ -109,6 +183,16 @@ bot.start(async (ctx) => {
   const { id, username, first_name } = ctx.from;
   db.upsertUser({ telegramId: id, username, firstName: first_name });
   contactMode.delete(id);
+  auditSessions.delete(id);
+
+  // Saytdan deep-link bilan kelganlar: t.me/xroot_agency_bot?start=audit
+  if (ctx.startPayload === 'audit') {
+    pendingAudit.add(id);
+    // Agar foydalanuvchi tilni avval tanlagan bo'lsa — to'g'ridan-to'g'ri auditga o'tamiz
+    if (db.getUser(id)?.language) {
+      return startAudit(ctx);
+    }
+  }
 
   await ctx.reply(
     '👋 *Xroot IT Bot*ga xush kelibsiz!\n\nTilni tanlang / Choose language / Выберите язык:',
@@ -133,6 +217,11 @@ bot.action(/^lang:(uz|ru|en)$/, async (ctx) => {
   db.setLanguage(id, l);
   await ctx.answerCbQuery();
   await ctx.editMessageText(T[l].langOk, { parse_mode: 'Markdown' });
+
+  // Deep-link orqali audit niyati bilan kelgan bo'lsa — to'g'ridan-to'g'ri arizaga
+  if (pendingAudit.has(id)) {
+    return startAudit(ctx);
+  }
   await ctx.reply(T[l].menu, { parse_mode: 'Markdown', ...mainKeyboard(id) });
 });
 
@@ -154,8 +243,9 @@ bot.command('admin', async (ctx) => {
   await ctx.reply('🔐 *Admin Panel*', {
     parse_mode: 'Markdown',
     ...Markup.keyboard([
-      ['📊 Statistika', '👥 Foydalanuvchilar'],
-      ['📢 Broadcast',  '🏠 Menyuga qaytish'],
+      ['📋 Arizalar',   '📊 Statistika'],
+      ['👥 Foydalanuvchilar', '📢 Broadcast'],
+      ['🏠 Menyuga qaytish'],
     ]).resize(),
   });
 });
@@ -193,16 +283,26 @@ bot.on('text', async (ctx) => {
     if (text === '📊 Statistika') {
       const s = db.getStats();
       await ctx.reply(
-        `📊 *Statistika*\n\n👥 Foydalanuvchilar: *${s.totalUsers}*\n📩 Kontaktlar: *${s.totalContacts}*\n\n🌐 Tillar:\n🇺🇿 O'zbek: ${s.langUz}\n🇷🇺 Rus: ${s.langRu}\n🇬🇧 Ingliz: ${s.langEn}`,
+        `📊 *Statistika*\n\n👥 Foydalanuvchilar: *${s.totalUsers}*\n📝 Audit arizalari: *${s.totalLeads}*\n📩 Kontaktlar: *${s.totalContacts}*\n\n🌐 Tillar:\n🇺🇿 O'zbek: ${s.langUz}\n🇷🇺 Rus: ${s.langRu}\n🇬🇧 Ingliz: ${s.langEn}`,
         { parse_mode: 'Markdown' }
       );
+      return;
+    }
+    if (text === '📋 Arizalar') {
+      const leads = db.getAllLeads().slice(-15).reverse();
+      if (!leads.length) { await ctx.reply('Hali audit arizasi yo\'q'); return; }
+      const list = leads.map((l, i) => {
+        const who = `${l.first_name || 'Nomsiz'}${l.username ? ` (@${l.username})` : ''}`;
+        return `*${i+1}.* ${who}\n🏢 ${l.company || '—'}\n📞 ${l.phone || '—'}\n💬 ${l.need || '—'}`;
+      }).join('\n\n');
+      await ctx.reply(`📋 *Oxirgi audit arizalari:*\n\n${list}`, { parse_mode: 'Markdown' });
       return;
     }
     if (text === '👥 Foydalanuvchilar') {
       const users = db.getAllUsers().slice(0, 20);
       if (!users.length) { await ctx.reply('Hali foydalanuvchi yo\'q'); return; }
       const list = users.map((u, i) =>
-        `${i+1}. ${u.first_name || 'Nomsiz'} ${u.username ? `(@${u.username})` : ''} — ${u.language.toUpperCase()}`
+        `${i+1}. ${u.first_name || 'Nomsiz'} ${u.username ? `(@${u.username})` : ''} — ${(u.language || 'en').toUpperCase()}`
       ).join('\n');
       await ctx.reply(`👥 *Foydalanuvchilar:*\n\n${list}`, { parse_mode: 'Markdown' });
       return;
@@ -214,6 +314,34 @@ bot.on('text', async (ctx) => {
     }
     if (text === '🏠 Menyuga qaytish') {
       await ctx.reply(t.menu, { parse_mode: 'Markdown', ...mainKeyboard(id) });
+      return;
+    }
+  }
+
+  // --- AUDIT ARIZA OQIMI ---
+  if (auditSessions.has(id)) {
+    // Istalgan bosqichda "Orqaga" bilan bekor qilish
+    if (all.some(l => text === l.btnBack)) {
+      auditSessions.delete(id);
+      await ctx.reply(t.menu, { parse_mode: 'Markdown', ...mainKeyboard(id) });
+      return;
+    }
+    const sess = auditSessions.get(id);
+    if (sess.step === 'company') {
+      sess.data.company = text;
+      sess.step = 'phone';
+      await ctx.reply(t.auditPhone, { parse_mode: 'Markdown', ...phoneKeyboard(id) });
+      return;
+    }
+    if (sess.step === 'phone') {
+      sess.data.phone = text;
+      sess.step = 'need';
+      await ctx.reply(t.auditNeed, { parse_mode: 'Markdown', ...backKeyboard(id) });
+      return;
+    }
+    if (sess.step === 'need') {
+      sess.data.need = text;
+      await finalizeAudit(ctx);
       return;
     }
   }
@@ -237,6 +365,10 @@ bot.on('text', async (ctx) => {
   }
 
   // --- ASOSIY MENYU ---
+  if (all.some(l => text === l.auditBtn)) {
+    await startAudit(ctx);
+    return;
+  }
   if (all.some(l => text === l.btnAbout)) {
     await ctx.reply(t.about, { parse_mode: 'Markdown', ...backKeyboard(id) });
     return;
@@ -270,6 +402,19 @@ bot.on('text', async (ctx) => {
 
   // --- NOMA'LUM ---
   await ctx.reply(t.unknown);
+});
+
+// ====================================
+// KONTAKT (telefon ulashish) — audit oqimida
+// ====================================
+bot.on('contact', async (ctx) => {
+  const id = ctx.from.id;
+  if (!auditSessions.has(id)) return;
+  const sess = auditSessions.get(id);
+  if (sess.step !== 'phone') return;
+  sess.data.phone = ctx.message.contact.phone_number;
+  sess.step = 'need';
+  await ctx.reply(tx(id).auditNeed, { parse_mode: 'Markdown', ...backKeyboard(id) });
 });
 
 // ====================================

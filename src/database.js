@@ -14,7 +14,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 const adapter = new FileSync(path.join(dataDir, 'db.json'));
 const db      = low(adapter);
 
-db.defaults({ users: [], contacts: [] }).write();
+db.defaults({ users: [], contacts: [], leads: [] }).write();
 
 function getUser(telegramId) {
   return db.get('users').find({ telegram_id: telegramId }).value();
@@ -33,7 +33,7 @@ function upsertUser({ telegramId, username, firstName }) {
       telegram_id: telegramId,
       username:    username || null,
       first_name:  firstName || null,
-      language:    'en',
+      language:    null, // til tanlanmagan; getLang() 'en'ga qaytadi
       created_at:  new Date().toISOString(),
     }).write();
   }
@@ -59,16 +59,35 @@ function saveContact({ telegramId, firstName, username, message }) {
   }).write();
 }
 
+function saveLead({ telegramId, firstName, username, company, phone, need }) {
+  db.get('leads').push({
+    id:          Date.now(),
+    telegram_id: telegramId,
+    first_name:  firstName || null,
+    username:    username || null,
+    company:     company || null,
+    phone:       phone || null,
+    need:        need || null,
+    created_at:  new Date().toISOString(),
+  }).write();
+}
+
+function getAllLeads() {
+  return db.get('leads').value();
+}
+
 function getStats() {
   const users    = db.get('users').value();
   const contacts = db.get('contacts').value();
+  const leads    = db.get('leads').value();
   return {
     totalUsers:    users.length,
     totalContacts: contacts.length,
+    totalLeads:    leads.length,
     langUz:        users.filter(u => u.language === 'uz').length,
     langRu:        users.filter(u => u.language === 'ru').length,
     langEn:        users.filter(u => u.language === 'en').length,
   };
 }
 
-module.exports = { getUser, upsertUser, setLanguage, getAllUsers, saveContact, getStats };
+module.exports = { getUser, upsertUser, setLanguage, getAllUsers, saveContact, saveLead, getAllLeads, getStats };
