@@ -20,6 +20,8 @@ const broadcastMode = new Set();
 const auditSessions = new Map();
 // Deep-link orqali "audit" niyati bilan kelganlar (til tanlagandan keyin boshlanadi)
 const pendingAudit  = new Set();
+// Reklama manbasi: telegramId -> source (masalan 'target', 'ig', 'direct')
+const auditSource   = new Map();
 
 // ====================================
 // MATNLAR (3 TIL)
@@ -153,6 +155,9 @@ async function finalizeAudit(ctx) {
   const t = tx(id);
   auditSessions.delete(id);
 
+  const source = auditSource.get(id) || 'direct';
+  auditSource.delete(id);
+
   db.saveLead({
     telegramId: id,
     firstName:  first_name,
@@ -160,6 +165,7 @@ async function finalizeAudit(ctx) {
     company:    sess.data.company,
     phone:      sess.data.phone,
     need:       sess.data.need,
+    source,
   });
 
   await ctx.telegram.sendMessage(
@@ -169,6 +175,7 @@ async function finalizeAudit(ctx) {
     `🏢 ${sess.data.company}\n` +
     `📞 ${sess.data.phone}\n` +
     `💬 ${sess.data.need}\n\n` +
+    `📍 Manba: *${source}*\n` +
     `🆔 \`${id}\` · 🌐 ${getLang(id).toUpperCase()}`,
     { parse_mode: 'Markdown' }
   ).catch(() => {});
@@ -185,8 +192,13 @@ bot.start(async (ctx) => {
   contactMode.delete(id);
   auditSessions.delete(id);
 
-  // Saytdan deep-link bilan kelganlar: t.me/xroot_agency_bot?start=audit
-  if (ctx.startPayload === 'audit') {
+  // Deep-link orqali audit niyati: t.me/<bot>?start=audit yoki ?start=audit_<manba>
+  // Masalan: audit_target, audit_ig, audit_tg — har biri reklama kanali.
+  const payload = ctx.startPayload || '';
+  if (payload === 'audit' || payload.startsWith('audit_')) {
+    // 'audit' -> 'direct', 'audit_target' -> 'target'
+    const source = payload === 'audit' ? 'direct' : payload.slice('audit_'.length);
+    auditSource.set(id, source);
     pendingAudit.add(id);
     // Agar foydalanuvchi tilni avval tanlagan bo'lsa — to'g'ridan-to'g'ri auditga o'tamiz
     if (db.getUser(id)?.language) {
@@ -293,7 +305,7 @@ bot.on('text', async (ctx) => {
       if (!leads.length) { await ctx.reply('Hali audit arizasi yo\'q'); return; }
       const list = leads.map((l, i) => {
         const who = `${l.first_name || 'Nomsiz'}${l.username ? ` (@${l.username})` : ''}`;
-        return `*${i+1}.* ${who}\n🏢 ${l.company || '—'}\n📞 ${l.phone || '—'}\n💬 ${l.need || '—'}`;
+        return `*${i+1}.* ${who}\n🏢 ${l.company || '—'}\n📞 ${l.phone || '—'}\n💬 ${l.need || '—'}\n📍 ${l.source || 'direct'}`;
       }).join('\n\n');
       await ctx.reply(`📋 *Oxirgi audit arizalari:*\n\n${list}`, { parse_mode: 'Markdown' });
       return;

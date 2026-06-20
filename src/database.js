@@ -59,7 +59,7 @@ function saveContact({ telegramId, firstName, username, message }) {
   }).write();
 }
 
-function saveLead({ telegramId, firstName, username, company, phone, need }) {
+function saveLead({ telegramId, firstName, username, company, phone, need, source }) {
   db.get('leads').push({
     id:          Date.now(),
     telegram_id: telegramId,
@@ -68,6 +68,7 @@ function saveLead({ telegramId, firstName, username, company, phone, need }) {
     company:     company || null,
     phone:       phone || null,
     need:        need || null,
+    source:      source || 'direct', // reklama manbasi (deep-link payload)
     created_at:  new Date().toISOString(),
   }).write();
 }
