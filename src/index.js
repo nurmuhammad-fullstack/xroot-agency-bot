@@ -199,6 +199,21 @@ async function finalizeAudit(ctx) {
 }
 
 // ====================================
+// GURUHLARDA UI'NI O'CHIRISH (barcha handler'lardan OLDIN bo'lishi shart)
+// Bot faqat shaxsiy chatда ishlaydi. Guruh — bu faqat leadlar tushadigan joy.
+// Guruhda bot menyu/audit ko'rsatmaydi; faqat /chatid javob beradi.
+// ====================================
+bot.use(async (ctx, next) => {
+  const type = ctx.chat?.type;
+  if (type && type !== 'private') {
+    const text = ctx.message?.text || '';
+    if (text.startsWith('/chatid')) return next(); // ID olishga ruxsat
+    return; // boshqa hammasini e'tiborsiz qoldiramiz
+  }
+  return next();
+});
+
+// ====================================
 // /start
 // ====================================
 bot.start(async (ctx) => {
