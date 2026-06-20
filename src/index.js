@@ -18,6 +18,15 @@ if (!process.env.ADMIN_TELEGRAM_ID) {
   console.log(`👤 Admin ID: ${ADMIN_ID}`);
 }
 
+// Leadlar guruhi: barcha lead va kontakt xabarlari shu chatga yoziladi
+// (doimiy yozuv — Render restart qilsa ham saqlanadi). Sozlanmasa adminga DM.
+const NOTIFY_CHAT = process.env.LEADS_CHAT_ID || ADMIN_ID;
+if (process.env.LEADS_CHAT_ID) {
+  console.log(`📋 Leadlar guruhi: ${process.env.LEADS_CHAT_ID}`);
+} else {
+  console.warn('ℹ️ LEADS_CHAT_ID yo\'q — leadlar admin DM\'ga boradi. Guruhga yozish uchun sozlang.');
+}
+
 // Kontakt rejimidagi foydalanuvchilar
 const contactMode  = new Set();
 const broadcastMode = new Set();
@@ -175,7 +184,7 @@ async function finalizeAudit(ctx) {
   });
 
   await ctx.telegram.sendMessage(
-    ADMIN_ID,
+    NOTIFY_CHAT,
     `🔔🔥 *YANGI AUDIT ARIZASI*\n\n` +
     `👤 ${first_name || 'Nomsiz'}${username ? ` (@${username})` : ''}\n` +
     `🏢 ${sess.data.company}\n` +
@@ -184,7 +193,7 @@ async function finalizeAudit(ctx) {
     `📍 Manba: *${source}*\n` +
     `🆔 \`${id}\` · 🌐 ${getLang(id).toUpperCase()}`,
     { parse_mode: 'Markdown' }
-  ).catch((e) => console.error('❌ Admin\'ga xabar yuborilmadi:', ADMIN_ID, e.message));
+  ).catch((e) => console.error('❌ Lead xabari yuborilmadi:', NOTIFY_CHAT, e.message));
 
   await ctx.reply(t.auditDone, { parse_mode: 'Markdown', ...mainKeyboard(id) });
 }
@@ -254,6 +263,21 @@ bot.command('myid', async (ctx) => {
     (me === ADMIN_ID
       ? '✅ Siz adminsiz — bildirishnomalar shu chatga keladi.'
       : '⚠️ Bu ID admin ID bilan MOS EMAS. Render → Environment\'da ADMIN_TELEGRAM_ID ni shu raqamga o\'rnating.'),
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// /chatid — joriy chat ID'sini ko'rsatadi. Guruhda ishlatilsa, o'sha raqamni
+// Render → Environment'da LEADS_CHAT_ID ga qo'ying — leadlar shu guruhga tushadi.
+bot.command('chatid', async (ctx) => {
+  const chatId = String(ctx.chat.id);
+  const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+  await ctx.reply(
+    `🆔 Bu chat ID: \`${chatId}\`\n` +
+    `Tur: ${ctx.chat.type}\n\n` +
+    (isGroup
+      ? '➡️ Render → Environment\'da `LEADS_CHAT_ID` = shu raqam (minus bilan) qiling. Barcha leadlar shu guruhga yoziladi.'
+      : 'ℹ️ Bu shaxsiy chat. Leadlar guruhi uchun guruh oching, botni qo\'shing va u yerda /chatid yozing.'),
     { parse_mode: 'Markdown' }
   );
 });
@@ -388,10 +412,10 @@ bot.on('text', async (ctx) => {
     }
     db.saveContact({ telegramId: id, firstName: first_name, username, message: text });
     await ctx.telegram.sendMessage(
-      ADMIN_ID,
-      `📩 *Yangi xabar*\n\n👤 ${first_name || 'Nomsiz'}${username ? ` (@${username})` : ''}\n🆔 \`${id}\`\n🌐 ${getLang(id).toUpperCase()}\n\n💬 ${text}`,
+      NOTIFY_CHAT,
+      `🔔📩 *Yangi xabar*\n\n👤 ${first_name || 'Nomsiz'}${username ? ` (@${username})` : ''}\n🆔 \`${id}\`\n🌐 ${getLang(id).toUpperCase()}\n\n💬 ${text}`,
       { parse_mode: 'Markdown' }
-    ).catch(() => {});
+    ).catch((e) => console.error('❌ Kontakt xabari yuborilmadi:', NOTIFY_CHAT, e.message));
     contactMode.delete(id);
     await ctx.reply(t.contactSent, { parse_mode: 'Markdown', ...mainKeyboard(id) });
     return;
