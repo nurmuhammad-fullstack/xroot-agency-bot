@@ -12,6 +12,12 @@ if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN .env faylida yo\'q!');
 const bot     = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = String(process.env.ADMIN_TELEGRAM_ID);
 
+if (!process.env.ADMIN_TELEGRAM_ID) {
+  console.warn('⚠️ ADMIN_TELEGRAM_ID o\'rnatilmagan! Admin\'ga lead bildirishnomalari KELMAYDI. Render → Environment\'da sozlang.');
+} else {
+  console.log(`👤 Admin ID: ${ADMIN_ID}`);
+}
+
 // Kontakt rejimidagi foydalanuvchilar
 const contactMode  = new Set();
 const broadcastMode = new Set();
@@ -170,7 +176,7 @@ async function finalizeAudit(ctx) {
 
   await ctx.telegram.sendMessage(
     ADMIN_ID,
-    `🔥 *YANGI AUDIT ARIZASI*\n\n` +
+    `🔔🔥 *YANGI AUDIT ARIZASI*\n\n` +
     `👤 ${first_name || 'Nomsiz'}${username ? ` (@${username})` : ''}\n` +
     `🏢 ${sess.data.company}\n` +
     `📞 ${sess.data.phone}\n` +
@@ -178,7 +184,7 @@ async function finalizeAudit(ctx) {
     `📍 Manba: *${source}*\n` +
     `🆔 \`${id}\` · 🌐 ${getLang(id).toUpperCase()}`,
     { parse_mode: 'Markdown' }
-  ).catch(() => {});
+  ).catch((e) => console.error('❌ Admin\'ga xabar yuborilmadi:', ADMIN_ID, e.message));
 
   await ctx.reply(t.auditDone, { parse_mode: 'Markdown', ...mainKeyboard(id) });
 }
@@ -235,6 +241,21 @@ bot.action(/^lang:(uz|ru|en)$/, async (ctx) => {
     return startAudit(ctx);
   }
   await ctx.reply(T[l].menu, { parse_mode: 'Markdown', ...mainKeyboard(id) });
+});
+
+// ====================================
+// /myid — Telegram ID'ni bilish (ADMIN_TELEGRAM_ID'ni to'g'ri sozlash uchun)
+// ====================================
+bot.command('myid', async (ctx) => {
+  const me = String(ctx.from.id);
+  await ctx.reply(
+    `🆔 Sizning Telegram ID: \`${me}\`\n\n` +
+    `Admin sozlangan ID: \`${ADMIN_ID}\`\n` +
+    (me === ADMIN_ID
+      ? '✅ Siz adminsiz — bildirishnomalar shu chatga keladi.'
+      : '⚠️ Bu ID admin ID bilan MOS EMAS. Render → Environment\'da ADMIN_TELEGRAM_ID ni shu raqamga o\'rnating.'),
+    { parse_mode: 'Markdown' }
+  );
 });
 
 // ====================================
