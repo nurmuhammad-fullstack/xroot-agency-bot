@@ -530,9 +530,21 @@ if (SELF_URL && typeof fetch === 'function') {
 // ====================================
 // ISHGA TUSHIRISH
 // ====================================
-bot.launch()
-  .then(() => console.log('✅ Xroot IT Bot ishga tushdi!'))
-  .catch(err => { console.error('❌ Bot ishga tushmadi:', err.message); process.exit(1); });
+// Render zero-downtime deploy paytida eski va yangi instansiya bir muddat
+// birga ishlaydi → ikkalasi polling qilsa Telegram 409 beradi. Shu sabab
+// ishga tushishda XATO bo'lsa process'ni o'ldirmaymiz (health server tirik
+// qolsin, deploy muvaffaqiyatli bo'lsin) — eski instansiya o'lguncha qayta
+// urinaveramiz.
+async function launchBot() {
+  try {
+    await bot.launch({ dropPendingUpdates: true });
+    console.log('✅ Xroot IT Bot ishga tushdi!');
+  } catch (err) {
+    console.error('⚠️ Bot ishga tushmadi (5s dan keyin qayta urinaman):', err.message);
+    setTimeout(launchBot, 5000);
+  }
+}
+launchBot();
 
 process.once('SIGINT',  () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
