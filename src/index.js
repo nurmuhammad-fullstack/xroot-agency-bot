@@ -432,9 +432,28 @@ bot.catch((err) => {
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
+  // /health — uptime-monitor uchun yengil endpoint
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Xroot IT Bot is running ✅');
 }).listen(PORT, () => console.log(`🌐 Health server :${PORT}`));
+
+// Self-ping: bepul Render servisi 15 daqiqa trafiksiz uxlaydi. Bot o'zining
+// ommaviy URL'iga (Render avtomatik beradigan RENDER_EXTERNAL_URL) har 5
+// daqiqada so'rov yuboradi — bitta ping o'tib ketsa ham 15 daqiqalik
+// chegaradan oshmaydi. To'liq ishonchlilik uchun TASHQI uptime-monitor
+// ham sozlang (UptimeRobot / cron-job.org) — u uxlab qolgan servisni
+// uyg'ota oladi, self-ping esa faqat tirik servisni tirik ushlab turadi.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_URL && typeof fetch === 'function') {
+  const ping = () => fetch(SELF_URL)
+    .then(() => console.log(`🔄 Self-ping OK: ${new Date().toISOString()}`))
+    .catch((e) => console.warn('⚠️ Self-ping xato:', e.message));
+  setInterval(ping, 5 * 60 * 1000);
+  ping(); // ishga tushganda darhol bir marta
+  console.log(`🔄 Self-ping yoqildi (har 5 daqiqada): ${SELF_URL}`);
+} else {
+  console.warn('⚠️ RENDER_EXTERNAL_URL yo\'q — self-ping o\'chiq. Tashqi monitor sozlang!');
+}
 
 // ====================================
 // ISHGA TUSHIRISH
